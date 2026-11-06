@@ -82,3 +82,10 @@ rendered PTY interaction. A local stdio LSP fixture also exercises Neovim's real
 client transport, document synchronization, encoding and edit handling.
 `FORMAT_TOOLS_BIN` adds executable directories for real
 tests; `FORMAT_TOOLS_REQUIRE_REAL=19` requires all nineteen real tool scenarios.
+
+## Command ownership
+
+Commands belong to the plugin; choose global entry keys and short aliases in
+your configuration. Registration reports same-name conflicts without replacing
+user commands. Reconfiguration refreshes only commands still owned by this
+plugin, and cleanup preserves subsequent user replacements.

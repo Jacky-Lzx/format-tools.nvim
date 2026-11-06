@@ -76,7 +76,7 @@ function M.setup(api, engine)
     end,
   }
   for name, callback in pairs(commands) do
-    vim.api.nvim_create_user_command(name, callback, { bang = true, force = true, desc = name })
+    require("format_tools.user_command").create(name, callback, { bang = true, force = true, desc = name })
   end
 end
 
