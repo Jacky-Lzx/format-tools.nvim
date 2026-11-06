@@ -21,8 +21,8 @@ function M.build(ctx, config, request)
   if type(list) == "function" then
     list = list(ctx.bufnr)
   end
-  assert(type(list) == "table", "Formatter list must be a table")
-  local opts = vim.tbl_extend("force", config.default_format_opts, list, request)
+  local Config = require("format_tools.config")
+  local opts = vim.tbl_extend("force", config.default_format_opts, Config.list(list), request)
   require("format_tools.config").options(opts)
   local items, candidates, seen = {}, {}, {}
   local names = vim.deepcopy(list)
@@ -31,6 +31,7 @@ function M.build(ctx, config, request)
     if type(all) == "function" then
       all = all(ctx.bufnr)
     end
+    Config.list(all)
     for _, name in ipairs(all) do
       names[#names + 1] = name
     end
@@ -46,7 +47,10 @@ function M.build(ctx, config, request)
         assert(type(def.transform) == "function", "transform must be a function")
         item.available = true
       else
-        local command = type(def.command) == "function" and def.command(ctx) or def.command
+        local command = def.command
+        if type(command) == "function" then
+          command = command(ctx)
+        end
         if type(command) == "string" and command ~= "" and vim.fn.executable(command) == 1 then
           item.available, item.command = true, vim.fn.exepath(command)
         else
@@ -62,7 +66,17 @@ function M.build(ctx, config, request)
       candidates[#candidates + 1] = item
     end
   end
-  return { items = items, candidates = candidates, opts = opts }
+  local client
+  if opts.lsp_format == "prefer" or (opts.lsp_format == "fallback" and #items == 0) then
+    client = require("format_tools.lsp").select(ctx, opts)
+    if client then
+      for _, item in ipairs(items) do
+        item.selected, item.reason = false, "LSP preferred"
+      end
+      items = { { name = "LSP: " .. client.name, client = client, definition = {} } }
+    end
+  end
+  return { items = items, candidates = candidates, opts = opts, client = client }
 end
 
 return M

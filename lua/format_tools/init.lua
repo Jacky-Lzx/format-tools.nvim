@@ -14,6 +14,7 @@ function M.setup(opts)
     engine:cancel(nil, "setup replaced")
   end
   engine = require("format_tools.engine").new(config)
+  require("format_tools.autocmds").setup(M, engine)
 end
 
 function M.format(opts, callback)
@@ -24,10 +25,39 @@ end
 function M.cancel(buf)
   current():cancel(buffer(buf))
 end
+function M.enable(buf)
+  if buf then
+    current().disabled[buffer(buf)] = nil
+  else
+    current().enabled = true
+  end
+end
+function M.disable(buf)
+  if buf then
+    buf = buffer(buf)
+    current().disabled[buf] = true
+  else
+    current().enabled = false
+  end
+  current():cancel(buf, "autoformat disabled")
+end
+function M.is_enabled(buf)
+  return current().enabled and not current().disabled[buffer(buf)]
+end
 function M.status(buf)
   local job = current().states[buffer(buf)]
   if not job then
     return nil
+  end
+  local steps = {}
+  for _, item in ipairs(job.plan and job.plan.items or {}) do
+    steps[#steps + 1] = {
+      name = item.name,
+      argv = vim.deepcopy(item.argv),
+      cwd = item.cwd,
+      exit_code = item.exit_code,
+      stderr = item.stderr,
+    }
   end
   return {
     status = job.status,
@@ -35,6 +65,7 @@ function M.status(buf)
     did_edit = job.did_edit,
     duration_ms = job.duration_ms,
     current = job.current,
+    steps = steps,
   }
 end
 function M.config()
@@ -53,10 +84,19 @@ function M.inspect(buf, opts)
       reason = item.reason,
     }
   end
-  return { formatters = items, options = plan.opts, last = M.status(buf) }
+  return {
+    formatters = items,
+    options = plan.opts,
+    last = M.status(buf),
+    enabled = M.is_enabled(buf),
+    lsp = plan.client and { id = plan.client.id, name = plan.client.name } or nil,
+  }
 end
 function M.info(buf)
-  local info = M.inspect(buf)
+  local ok, info = pcall(M.inspect, buf)
+  if not ok then
+    info = { error = tostring(info), last = M.status(buf) }
+  end
   vim.notify(vim.inspect(info), vim.log.levels.INFO, { title = "FormatToolsInfo" })
   return info
 end

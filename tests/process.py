@@ -4,8 +4,13 @@ import sys
 import time
 
 mode = sys.argv[1]
-if mode == "inplace":
+if mode in {"inplace", "inplace_gate"}:
     path = pathlib.Path(sys.argv[2])
+    if mode == "inplace_gate":
+        ready, release = map(pathlib.Path, sys.argv[3:5])
+        ready.write_text(str(path))
+        while not release.exists():
+            time.sleep(0.005)
     path.write_text(path.read_text().upper())
 elif mode == "argv":
     sys.stdout.write(sys.argv[2])

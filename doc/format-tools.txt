@@ -1,0 +1,96 @@
+*format-tools.txt*             Transactional formatting for Neovim 0.11+
+
+SETUP                                                     *format-tools-setup*
+>
+  require('format_tools').setup({
+    formatters_by_ft = {
+      lua = { 'stylua' },
+      python = { 'ruff_fix', 'ruff_organize_imports', 'ruff_format' },
+      markdown = { 'prettierd', 'prettier', stop_after_first = true },
+      ['_'] = { 'trim_whitespace' },
+    },
+    default_format_opts = { lsp_format = 'fallback', timeout_ms = 1000 },
+    format_on_save = { timeout_ms = 500 },
+  })
+<
+Install executables separately. No mappings or formatexpr are set by the plugin.
+The '_' list applies to unconfigured filetypes; '*' appends to every filetype.
+Lists may be functions receiving bufnr. Empty lists suppress the '_' default.
+
+COMMANDS                                               *format-tools-commands*
+:FormatToolsFormat          Format the current buffer synchronously.
+:FormatToolsCancel          Cancel the current buffer's request.
+:FormatToolsInfo            Inspect selection, availability and the last run.
+:FormatToolsDisable[!]      Disable autoformat globally, or in this buffer (!).
+:FormatToolsEnable[!]       Enable autoformat globally, or in this buffer (!).
+:checkhealth format_tools   Inspect configured executable availability.
+
+API                                                         *format-tools-api*
+require('format_tools') provides:
+  setup(opts)                Replace config, cancel requests, register commands.
+  format(opts?, callback?)   Return a request handle; synchronous by default.
+  cancel(bufnr?)             Cancel the buffer's active request.
+  status(bufnr?)             Return last run status, error, steps and timing.
+  inspect(bufnr?, opts?)     Return selection/availability without running tools.
+  info(bufnr?)               Display and return inspection information.
+  config()                   Return a copy of the configuration.
+  enable(bufnr?)             Enable global/buffer autoformat.
+  disable(bufnr?)            Disable autoformat and cancel pending requests.
+  is_enabled(bufnr?)         Return effective global + buffer autoformat state.
+Missing bufnr or 0 refers to the current buffer. For enable/disable, an omitted
+bufnr controls global autoformat; 0 controls the current buffer. Manual format
+ignores autoformat enablement. callback(error, did_edit, handle) runs once.
+Do not mutate request handles. Callback errors are reported independently.
+
+format options: bufnr, async, timeout_ms, quiet, formatters (explicit name list),
+stop_after_first, dry_run, undojoin, lsp_format, id, name, filter,
+formatting_options. Options merge in order: defaults, filetype list, request.
+timeout_ms is a positive integer deadline for the entire request, even async.
+dry_run retains formatted text as handle.output without applying edits.
+
+setup options: enabled (true), formatters_by_ft ({}), formatters (overrides),
+default_format_opts ({ timeout_ms = 1000, lsp_format = 'never' }),
+format_on_save (false), max_file_size (4 MiB), max_output (8 MiB).
+format_on_save accepts options or a function(bufnr) returning options/nil.
+Saving always waits for formatting before writing. Failure preserves the
+original buffer and the save proceeds. Reentrant saves do not start another run.
+
+LSP                                                         *format-tools-lsp*
+never: do not use LSP. fallback: use LSP if no external candidate is available.
+prefer: select LSP when available, otherwise use external candidates. A failed
+external process does not invoke LSP fallback. Multiple matching LSP clients
+require id, name or filter selection. Client encoding is respected, and LSP
+edits are applied to a scratch copy before diffing against the real buffer.
+
+ADAPTERS                                               *format-tools-adapters*
+Definitions use command, args, prepend_args, append_args, cwd, env, stdin,
+exit_codes, condition(ctx), or transform(ctx, text). Args must be argv lists,
+never shell strings. command, args/prepend_args/append_args, cwd, and env may
+be functions(ctx). $FILENAME/$DIRNAME expand inside arguments. stdin defaults
+to true; false runs against a private in-place copy, cleaned after process exit.
+exit_codes defaults to {0}. Definitions override built-in adapters.
+
+Context contains bufnr, name (possibly empty), filename (synthetic if unnamed),
+dirname, filetype, lines, input, changedtick, shiftwidth, tabstop, expandtab,
+fileformat, endofline, fixendofline, and binary. input uses canonical LF text
+with a final newline. The buffer's EOL policy is preserved when applying output.
+Transforms must be fast and nonblocking; they cannot be preempted by a timer.
+
+Built-ins: stylua, ruff_fix, ruff_organize_imports, ruff_format, prettier,
+prettierd, tex-fmt, typstyle, rustfmt, clang-format, nixfmt, jq, taplo, shfmt,
+fish_indent, cmake_format, html_beautify, gdscript-formatter,
+verible-verilog-format, mh_style, swift, trim_whitespace.
+
+GUARANTEES                                           *format-tools-guarantees*
+The chain runs against a snapshot and commits once. Errors, timeouts, cancellation
+and changed inputs leave source text unchanged. New requests supersede old ones.
+Output is bounded while reading; in-place output is size checked before reading.
+One format creates one undo entry unless undojoin is explicitly requested.
+No-op formatting creates no undo entry. Small edits preserve unrelated extmarks,
+folds and per-window cursor/viewport anchors. BufUnload, LspDetach and editor exit
+cancel affected requests. Temporary files are cleaned after child process exit.
+
+Not yet supported: range/embedded-language formatting, LSP first/last composition,
+post-save disk rewrites. Explicit ranges and unsupported options are rejected.
+
+vim:tw=80:ts=2:sw=2:et:ft=help:norl:

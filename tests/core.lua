@@ -60,18 +60,16 @@ eq(lines(), { "bad 中文", "keep this", "bad end", "tail" }, "whole format undo
 vim.cmd.redo()
 eq(lines()[1], "good 中文")
 vim.cmd.only()
-set(
-  { "中abc", "bad" },
-  {
-    formatters = {
-      test = {
-        transform = function(_, t)
-          return (t:gsub("中", "文"):gsub("bad", "good"))
-        end,
-      },
+local chinese_options = {
+  formatters = {
+    test = {
+      transform = function(_, text)
+        return (text:gsub("中", "文"):gsub("bad", "good"))
+      end,
     },
-  }
-)
+  },
+}
+set({ "中abc", "bad" }, chinese_options)
 F.format()
 eq(lines(), { "文abc", "good" })
 
@@ -85,18 +83,11 @@ for _, pair in ipairs({
   { { "a" }, { "" } },
   { { "" }, { "a", "b" } },
 }) do
-  set(
-    pair[1],
-    {
-      formatters = {
-        test = {
-          transform = function()
-            return table.concat(pair[2], "\n") .. "\n"
-          end,
-        },
-      },
-    }
-  )
+  local function render()
+    return table.concat(pair[2], "\n") .. "\n"
+  end
+  local hunk_options = { formatters = { test = { transform = render } } }
+  set(pair[1], hunk_options)
   F.format()
   eq(lines(), pair[2], "hunk")
   vim.cmd.undo()
@@ -253,11 +244,80 @@ release()
 wait(function()
   return job.finished
 end)
-eq(job.status, "stale")
+eq(job.status, "cancelled")
 set({ "bad" })
 eq(F.format({ dry_run = true }).output, "good\n")
 eq(lines(), { "bad" })
 eq(F.format({ range = {} }).status, "error")
 eq(lines(), { "bad" })
+local defaults = process("upper")
+defaults.formatters.test.cwd = function()
+  return nil
+end
+defaults.formatters.test.env = function()
+  return nil
+end
+set({ "bad" }, defaults)
+eq(F.format().status, "done", "nil dynamic cwd/env use defaults")
+eq(lines(), { "BAD" })
+set({ "bad" }, process("argv", { "$FILENAME" }))
+vim.api.nvim_buf_set_name(0, directory .. "/literal-$DIRNAME.txt")
+F.format()
+eq(lines(), { vim.api.nvim_buf_get_name(0) }, "placeholder values are not recursively expanded")
+-- Cancel an in-place process only after it has opened its isolated copy.
+local ready, released = directory .. "/inplace-ready", directory .. "/inplace-release"
+set({ "bad" }, process("inplace_gate", { "$FILENAME", ready, released }))
+local isolated_config = F.config()
+isolated_config.formatters.test.stdin = false
+F.setup(isolated_config)
+job = F.format({ async = true })
+wait(function()
+  return vim.uv.fs_stat(ready) ~= nil
+end)
+local private_file = vim.fn.readfile(ready)[1]
+assert(private_file ~= vim.api.nvim_buf_get_name(0))
+F.cancel()
+wait(function()
+  return not vim.uv.fs_stat(vim.fs.dirname(private_file))
+end)
+eq(job.status, "cancelled")
+eq(lines(), { "bad" })
+
+-- Reproducible mixed UTF-8 insert/delete/replace cases exercise diff coordinates.
+math.randomseed(271828)
+local alphabet = { "a", "中", "文", "😀", "", "xx" }
+for _ = 1, 80 do
+  local before, after = {}, {}
+  for _ = 1, math.random(1, 8) do
+    before[#before + 1] = alphabet[math.random(#alphabet)]
+  end
+  for _ = 1, math.random(1, 8) do
+    after[#after + 1] = alphabet[math.random(#alphabet)]
+  end
+  local function render()
+    return table.concat(after, "\n") .. "\n"
+  end
+  set(before, { formatters = { test = { transform = render } } })
+  job = F.format()
+  eq(job.status, "done")
+  eq(lines(), after)
+  if job.did_edit then
+    vim.cmd("silent undo")
+    eq(lines(), before)
+  end
+end
+set({ "bad", "keep", "keep", "bad" })
+vim.wo.foldmethod = "manual"
+vim.cmd("2,3fold")
+F.format()
+eq(vim.fn.foldclosed(2), 2, "unrelated manual fold stays closed")
+for _, invalid in ipairs({
+  { formatters_by_ft = { fixture = { [2] = "trim_whitespace" } } },
+  { default_format_opts = { timeout_ms = 0 } },
+  { formatters = { broken = { args = "shell string" } } },
+  { default_format_opts = { lsp_format = "first" } },
+}) do
+  eq(pcall(F.setup, invalid), false, "configuration validation")
+end
 vim.fn.delete(directory, "rf")
 print("Core formatting checks passed: " .. checks)

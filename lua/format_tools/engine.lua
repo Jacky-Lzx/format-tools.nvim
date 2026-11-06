@@ -104,7 +104,9 @@ function M.new(config)
         end
         advance(index + 1, text)
       end
-      if item.definition.transform then
+      if item.client then
+        job.stop = require("format_tools.lsp").start(item, job.context, job.opts, config, completed)
+      elseif item.definition.transform then
         local ok, result = pcall(item.definition.transform, job.context, input)
         if ok then
           completed(nil, result)
@@ -116,6 +118,7 @@ function M.new(config)
       end
     end
     local ok, err = pcall(function()
+      job.opts = vim.tbl_extend("force", config.default_format_opts, request)
       job.context = Context.capture(buf, config)
       job.plan = require("format_tools.plan").build(job.context, config, request)
       job.opts = job.plan.opts

@@ -3,6 +3,12 @@ local M = {}
 function M.start(item, ctx, input, opts, done)
   local def, process, directory = item.definition
   local output, size, failure = { stdout = {}, stderr = {} }, 0
+  local function evaluate(value)
+    if type(value) == "function" then
+      return value(ctx)
+    end
+    return value
+  end
   local function cleanup()
     if directory then
       vim.fn.delete(directory, "rf")
@@ -46,11 +52,8 @@ function M.start(item, ctx, input, opts, done)
       local values = {}
       for _, arg in ipairs(value or {}) do
         assert(type(arg) == "string" or type(arg) == "number", "Invalid formatter argument")
-        arg = tostring(arg):gsub("%$FILENAME", function()
-          return filename
-        end)
-        arg = arg:gsub("%$DIRNAME", function()
-          return ctx.dirname
+        arg = tostring(arg):gsub("%$([A-Z]+)", function(key)
+          return ({ FILENAME = filename, DIRNAME = ctx.dirname })[key]
         end)
         values[#values + 1] = arg
       end
@@ -61,10 +64,10 @@ function M.start(item, ctx, input, opts, done)
       vim.list_extend(argv, arguments(def[key]))
     end
     item.argv = argv
-    item.cwd = (type(def.cwd) == "function" and def.cwd(ctx) or def.cwd) or ctx.dirname
+    item.cwd = evaluate(def.cwd) or ctx.dirname
     process = vim.system(argv, {
       cwd = item.cwd,
-      env = type(def.env) == "function" and def.env(ctx) or def.env,
+      env = evaluate(def.env),
       stdin = def.stdin ~= false and input or nil,
       stdout = read("stdout"),
       stderr = read("stderr"),
@@ -87,7 +90,12 @@ function M.start(item, ctx, input, opts, done)
           end
         end
         cleanup()
-        done(failure or (not success and ("exit " .. exit.code .. ": " .. stderr) or nil), text, stderr, exit.code)
+        done(
+          failure or (not success and ("exit " .. exit.code .. ": " .. stderr:sub(1, 2000)) or nil),
+          text,
+          stderr,
+          exit.code
+        )
       end)
     end)
   end)
