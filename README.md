@@ -78,5 +78,7 @@ outside the initial API. This plugin has no dependency on Conform or other tools
 plugins, and does not install executables or set mappings/formatexpr.
 
 Run `sh tests/run.sh` for regression checks, available real formatter tests and
-rendered PTY interaction. `FORMAT_TOOLS_BIN` adds executable directories for real
+rendered PTY interaction. A local stdio LSP fixture also exercises Neovim's real
+client transport, document synchronization, encoding and edit handling.
+`FORMAT_TOOLS_BIN` adds executable directories for real
 tests; `FORMAT_TOOLS_REQUIRE_REAL=19` requires all nineteen real tool scenarios.

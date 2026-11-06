@@ -6,7 +6,7 @@ trap 'rm -rf "$format_tmp"' EXIT HUP INT TERM
 export XDG_STATE_HOME="$format_tmp/state"
 export XDG_CACHE_HOME="$format_tmp/cache"
 export NVIM_LOG_FILE="$format_tmp/nvim.log"
-for test in tests/core.lua tests/adapters.lua tests/lsp.lua tests/real.lua; do
+for test in tests/core.lua tests/adapters.lua tests/lsp.lua tests/lsp_session.lua tests/real.lua; do
   if test -f "$test"; then
     "${NVIM:-nvim}" --headless -u tests/minimal_init.lua -i NONE -n -l "$test"
   fi
