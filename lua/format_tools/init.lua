@@ -9,6 +9,8 @@ local function buffer(buf)
 end
 
 function M.setup(opts)
+  assert(opts == nil or type(opts) == "table", "format-tools.nvim: setup expects a table")
+  opts = vim.deepcopy(opts or {})
   local config = require("format_tools.config").normalize(opts)
   if engine then
     engine:cancel(nil, "setup replaced")
@@ -17,15 +19,37 @@ function M.setup(opts)
   require("format_tools.autocmds").setup(M, engine)
 end
 
+function M.dispose()
+  if engine then
+    engine:cancel(nil, "disposed")
+  end
+  engine = nil
+  pcall(vim.api.nvim_del_augroup_by_name, "FormatTools")
+  for _, name in ipairs({
+    "FormatToolsFormat",
+    "FormatToolsCancel",
+    "FormatToolsInfo",
+    "FormatToolsEnable",
+    "FormatToolsDisable",
+  }) do
+    require("format_tools.user_command").delete(name)
+  end
+end
+
 function M.format(opts, callback)
   opts = opts or {}
   return current():run(buffer(opts.bufnr), opts, callback)
 end
 
 function M.cancel(buf)
-  current():cancel(buffer(buf))
+  if engine then
+    engine:cancel(buffer(buf))
+  end
 end
 function M.enable(buf)
+  if not engine then
+    M.setup()
+  end
   if buf then
     current().disabled[buffer(buf)] = nil
   else
@@ -33,6 +57,9 @@ function M.enable(buf)
   end
 end
 function M.disable(buf)
+  if not engine then
+    return
+  end
   if buf then
     buf = buffer(buf)
     current().disabled[buf] = true
@@ -42,9 +69,12 @@ function M.disable(buf)
   current():cancel(buf, "autoformat disabled")
 end
 function M.is_enabled(buf)
-  return current().enabled and not current().disabled[buffer(buf)]
+  return engine ~= nil and engine.enabled and not engine.disabled[buffer(buf)]
 end
 function M.status(buf)
+  if not engine then
+    return nil
+  end
   local job = current().states[buffer(buf)]
   if not job then
     return nil
@@ -69,7 +99,7 @@ function M.status(buf)
   }
 end
 function M.config()
-  return vim.deepcopy(current().config)
+  return engine and vim.deepcopy(engine.config) or nil
 end
 function M.inspect(buf, opts)
   local ctx = require("format_tools.context").capture(buffer(buf), current().config)
