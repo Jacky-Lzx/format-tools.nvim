@@ -133,7 +133,7 @@ function M.info(buf)
   if not ok then
     info = { error = tostring(info), last = M.status(buf) }
   end
-  vim.notify(vim.inspect(info), vim.log.levels.INFO, { title = "FormatToolsInfo" })
+  vim.notify(vim.inspect(info), vim.log.levels.INFO, { title = "FormatToolsInfo", filetype = "lua" })
   return info
 end
 
