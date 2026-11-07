@@ -1,4 +1,43 @@
-*format-tools.txt*             Transactional formatting for Neovim 0.11+
+*format-tools.txt*	Transactional buffer formatting with external tools and native LSP.
+
+==============================================================================
+CONTENTS                                                        *format-tools*
+
+  Quick start         |format-tools-quickstart|
+  Commands            |format-tools-commands|
+  Options             |format-tools-options|
+  Lua API             |format-tools-api|
+  Lifecycle           |format-tools-lifecycle|
+  Troubleshooting     |format-tools-troubleshooting|
+
+==============================================================================
+QUICK START                                          *format-tools-quickstart*
+
+Requires Neovim 0.11+. Install formatter executables separately. LSP
+formatting requires a capable attached server.
+
+>lua
+    require("format_tools").setup({ formatters_by_ft = { lua = { "stylua" } } })
+<
+
+The example above selects a small working setup. Full defaults, options and
+feature contracts are documented in this reference. Public installation and
+package-manager examples are in README.md.
+
+==============================================================================
+TROUBLESHOOTING                                 *format-tools-troubleshooting*
+
+Check the minimum Neovim version and feature dependencies first. Run
+:checkhealth format_tools to inspect availability. Global mappings shown in
+the README are configuration examples unless explicitly documented as plugin
+defaults. Keep one owner for each overridden UI or mapping.
+
+==============================================================================
+OPTIONS                                                 *format-tools-options*
+
+Options are passed to require("format_tools").setup(opts). The quick start is
+an example, not a dump of defaults. Detailed configuration and examples follow
+below.
 
 SETUP                                                     *format-tools-setup*
 >
@@ -13,37 +52,43 @@ SETUP                                                     *format-tools-setup*
     format_on_save = { timeout_ms = 500 },
   })
 <
-Install executables separately. No mappings or formatexpr are set by the plugin.
-The '_' list applies to unconfigured filetypes; '*' appends to every filetype.
-Lists may be functions receiving bufnr. Empty lists suppress the '_' default.
+Install executables separately. No mappings or formatexpr are set by the
+plugin. The '_' list applies to unconfigured filetypes; '*' appends to every
+filetype. Lists may be functions receiving bufnr. Empty lists suppress the '_'
+default.
 
 COMMANDS                                               *format-tools-commands*
 :FormatToolsFormat          Format the current buffer synchronously.
 :FormatToolsCancel          Cancel the current buffer's request.
 :FormatToolsInfo            Inspect selection, availability and the last run.
-:FormatToolsDisable[!]      Disable autoformat globally, or in this buffer (!).
+:FormatToolsDisable[!]      Disable autoformat globally, or in this buffer
+(!).
 :FormatToolsEnable[!]       Enable autoformat globally, or in this buffer (!).
 :checkhealth format_tools   Inspect configured executable availability.
 
 API                                                         *format-tools-api*
 require('format_tools') provides:
-  setup(opts)                Replace config, cancel requests, register commands.
+  setup(opts)                Replace config, cancel requests, register
+      commands.
   format(opts?, callback?)   Return a request handle; synchronous by default.
   cancel(bufnr?)             Cancel the buffer's active request.
   status(bufnr?)             Return last run status, error, steps and timing.
-  inspect(bufnr?, opts?)     Return selection/availability without running tools.
+  inspect(bufnr?, opts?)     Return selection/availability without running
+      tools.
   info(bufnr?)               Display and return inspection information.
   config()                   Return a copy of the configuration.
   enable(bufnr?)             Enable global/buffer autoformat.
   disable(bufnr?)            Disable autoformat and cancel pending requests.
-  is_enabled(bufnr?)         Return effective global + buffer autoformat state.
-Missing bufnr or 0 refers to the current buffer. For enable/disable, an omitted
-bufnr controls global autoformat; 0 controls the current buffer. Manual format
-ignores autoformat enablement. callback(error, did_edit, handle) runs once.
-Do not mutate request handles. Callback errors are reported independently.
+  is_enabled(bufnr?)         Return effective global + buffer autoformat
+      state.
+Missing bufnr or 0 refers to the current buffer. For enable/disable, an
+omitted bufnr controls global autoformat; 0 controls the current buffer.
+Manual format ignores autoformat enablement. callback(error, did_edit, handle)
+runs once. Do not mutate request handles. Callback errors are reported
+independently.
 
-format options: bufnr, async, timeout_ms, quiet, formatters (explicit name list),
-stop_after_first, dry_run, undojoin, lsp_format, id, name, filter,
+format options: bufnr, async, timeout_ms, quiet, formatters (explicit name
+list), stop_after_first, dry_run, undojoin, lsp_format, id, name, filter,
 formatting_options. Options merge in order: defaults, filetype list, request.
 timeout_ms is a positive integer deadline for the entire request, even async.
 dry_run retains formatted text as handle.output without applying edits.
@@ -53,28 +98,31 @@ default_format_opts ({ timeout_ms = 1000, lsp_format = 'never' }),
 format_on_save (false), max_file_size (4 MiB), max_output (8 MiB).
 format_on_save accepts options or a function(bufnr) returning options/nil.
 Saving always waits for formatting before writing. Failure preserves the
-original buffer and the save proceeds. Reentrant saves do not start another run.
+original buffer and the save proceeds. Reentrant saves do not start another
+run.
 
 LSP                                                         *format-tools-lsp*
-never: do not use LSP. fallback: use LSP if no external candidate is available.
-prefer: select LSP when available, otherwise use external candidates. A failed
-external process does not invoke LSP fallback. Multiple matching LSP clients
-require id, name or filter selection. Client encoding is respected, and LSP
-edits are applied to a scratch copy before diffing against the real buffer.
+never: do not use LSP. fallback: use LSP if no external candidate is
+available. prefer: select LSP when available, otherwise use external
+candidates. A failed external process does not invoke LSP fallback. Multiple
+matching LSP clients require id, name or filter selection. Client encoding is
+respected, and LSP edits are applied to a scratch copy before diffing against
+the real buffer.
 
 ADAPTERS                                               *format-tools-adapters*
 Definitions use command, args, prepend_args, append_args, cwd, env, stdin,
 exit_codes, condition(ctx), or transform(ctx, text). Args must be argv lists,
 never shell strings. command, args/prepend_args/append_args, cwd, and env may
 be functions(ctx). $FILENAME/$DIRNAME expand inside arguments. stdin defaults
-to true; false runs against a private in-place copy, cleaned after process exit.
-exit_codes defaults to {0}. Definitions override built-in adapters.
+to true; false runs against a private in-place copy, cleaned after process
+exit. exit_codes defaults to {0}. Definitions override built-in adapters.
 
-Context contains bufnr, name (possibly empty), filename (synthetic if unnamed),
-dirname, filetype, lines, input, changedtick, shiftwidth, tabstop, expandtab,
-fileformat, endofline, fixendofline, and binary. input uses canonical LF text
-with a final newline. The buffer's EOL policy is preserved when applying output.
-Transforms must be fast and nonblocking; they cannot be preempted by a timer.
+Context contains bufnr, name (possibly empty), filename (synthetic if
+unnamed), dirname, filetype, lines, input, changedtick, shiftwidth, tabstop,
+expandtab, fileformat, endofline, fixendofline, and binary. input uses
+canonical LF text with a final newline. The buffer's EOL policy is preserved
+when applying output. Transforms must be fast and nonblocking; they cannot be
+preempted by a timer.
 
 Built-ins: stylua, ruff_fix, ruff_organize_imports, ruff_format, prettier,
 prettierd, tex-fmt, typstyle, rustfmt, clang-format, nixfmt, jq, taplo, shfmt,
@@ -82,15 +130,144 @@ fish_indent, cmake_format, html_beautify, gdscript-formatter,
 verible-verilog-format, mh_style, swift, trim_whitespace.
 
 GUARANTEES                                           *format-tools-guarantees*
-The chain runs against a snapshot and commits once. Errors, timeouts, cancellation
-and changed inputs leave source text unchanged. New requests supersede old ones.
-Output is bounded while reading; in-place output is size checked before reading.
-One format creates one undo entry unless undojoin is explicitly requested.
-No-op formatting creates no undo entry. Small edits preserve unrelated extmarks,
-folds and per-window cursor/viewport anchors. BufUnload, LspDetach and editor exit
-cancel affected requests. Temporary files are cleaned after child process exit.
+The chain runs against a snapshot and commits once. Errors, timeouts,
+cancellation and changed inputs leave source text unchanged. New requests
+supersede old ones. Output is bounded while reading; in-place output is size
+checked before reading. One format creates one undo entry unless undojoin is
+explicitly requested. No-op formatting creates no undo entry. Small edits
+preserve unrelated extmarks, folds and per-window cursor/viewport anchors.
+BufUnload, LspDetach and editor exit cancel affected requests. Temporary files
+are cleaned after child process exit.
 
-Not yet supported: range/embedded-language formatting, LSP first/last composition,
-post-save disk rewrites. Explicit ranges and unsupported options are rejected.
+Not yet supported: range/embedded-language formatting, LSP first/last
+composition, post-save disk rewrites. Explicit ranges and unsupported options
+are rejected.
 
-vim:tw=80:ts=2:sw=2:et:ft=help:norl:
+==============================================================================
+BEHAVIOR AND EXAMPLES           *format-tools-reference-behavior-and-examples*
+
+Transactional buffer formatting for Neovim 0.11+.
+
+>lua
+    require("format_tools").setup({
+      formatters_by_ft = {
+        lua = { "stylua" },
+        python = { "ruff_fix", "ruff_organize_imports", "ruff_format" },
+        markdown = { "prettierd", "prettier", stop_after_first = true },
+        ["_"] = { "trim_whitespace" },
+      },
+      default_format_opts = { lsp_format = "fallback" },
+      format_on_save = { timeout_ms = 500 },
+    })
+    require("format_tools").format()
+<
+
+Formatters transform an in-memory snapshot sequentially. The completed chain
+is applied once using small edits. Failure, timeout, cancellation, and stale
+inputs leave the buffer untouched. The entire chain shares one deadline (1000
+ms by default), including asynchronous calls. A new request cancels the older
+one. Output is bounded while reading. In-place tools receive a private
+temporary copy beside the original; the actual source file is never passed for
+mutation. Temporary copies are removed after the process exits, including
+cancellation.
+
+The buffer's fileformat and endofline options are preserved. A format creates
+one undo entry; `undojoin = true` explicitly joins the preceding edit. No-op
+formatting creates no undo entry. Views and cursor anchors are tracked across
+small edits in every window displaying the buffer. Formatter input uses LF
+line endings and a final newline as a canonical text representation,
+independent of the buffer's disk EOL policy.
+
+Custom definitions support `command`, argv-list `args`, `prepend_args`,
+`append_args`, `cwd`, `env`, `stdin` (false for in-place tools), `exit_codes`,
+and `condition(ctx)`. Arguments may contain `$FILENAME` and `$DIRNAME`.
+`command`, argv lists, `cwd`, and `env` may be functions of the snapshot
+context. `transform(ctx, text)` supplies an in-process text transformation
+instead. Transforms must be fast and nonblocking. Definitions override
+built-in adapters. Tools are installed separately, through your existing tool
+manager.
+
+Public API: `setup(opts)`, `format(opts, callback)`, `cancel(bufnr)`,
+`status(bufnr)`, `inspect(bufnr, opts)`, `info(bufnr)`, `config()`,
+`enable(bufnr?)`, `disable(bufnr?)`, and `is_enabled(bufnr)`. `format` returns
+a request handle with `status`, `error`, and `did_edit`. The callback `(error,
+did_edit, handle)` is delivered once on completion. Options include `bufnr`,
+`async`, `timeout_ms`, `quiet`, `formatters`, `stop_after_first`, `dry_run`,
+and `undojoin`. `inspect` explains candidate availability and selection
+without starting tools. `_` supplies the list for unconfigured filetypes; `*`
+appends to all filetypes.
+
+`:FormatToolsFormat`, `:FormatToolsCancel`, and `:FormatToolsInfo` operate on
+the current buffer. `:FormatToolsDisable` / `:FormatToolsEnable` control
+global autoformat; a bang controls only the current buffer. Manual format
+stays usable when autoformat is disabled. `format_on_save` may be a function
+of bufnr returning options or nil to skip. Saving always formats synchronously
+before the disk write. Repeated setup cancels existing requests and replaces
+its autocommands. `:checkhealth format_tools` checks configured tools without
+running them.
+
+LSP modes are `never`, `fallback` (no external formatter is available), and
+`prefer` (use LSP when available). An external formatter error does not
+trigger LSP fallback. Multiple matching LSP clients require explicit `id`,
+`name`, or `filter` selection. LSP edits are decoded using the client's
+encoding on a scratch copy, then applied through the same minimal-diff path. A
+detached client cancels its request. `formatting_options` overrides
+tabSize/insertSpaces.
+
+Built-in adapters: stylua, ruff_fix, ruff_organize_imports, ruff_format,
+prettier, prettierd, tex-fmt, typstyle, rustfmt, clang-format, nixfmt, jq,
+taplo, shfmt, fish_indent, cmake_format, html_beautify, gdscript-formatter,
+verible-verilog-format, mh_style, swift, and trim_whitespace. Node-based tools
+prefer the nearest node_modules/.bin; Ruff prefers a project .venv/bin.
+Rustfmt reads package/workspace edition metadata from Cargo.toml.
+
+Range formatting and embedded-language formatting are not implemented yet.
+Explicit ranges are rejected rather than silently formatting the entire
+buffer. LSP `first`/`last` composition and asynchronous post-save rewrites are
+also outside the initial API. This plugin has no dependency on Conform or
+other tools plugins, and does not install executables or set
+mappings/formatexpr.
+
+Run `sh tests/run.sh` for regression checks, available real formatter tests
+and rendered PTY interaction. A local stdio LSP fixture also exercises
+Neovim's real client transport, document synchronization, encoding and edit
+handling. `FORMAT_TOOLS_BIN` adds executable directories for real tests;
+`FORMAT_TOOLS_REQUIRE_REAL=19` requires all nineteen real tool scenarios.
+
+==============================================================================
+COMMAND OWNERSHIP                   *format-tools-reference-command-ownership*
+
+Commands belong to the plugin; choose global entry keys and short aliases in
+your configuration. Registration reports same-name conflicts without replacing
+user commands. Reconfiguration refreshes only commands still owned by this
+plugin, and cleanup preserves subsequent user replacements.
+
+==============================================================================
+SETUP CONTRACT                                        *format-tools-lifecycle*
+                                       *format-tools-reference-setup-contract*
+
+`setup(nil)` uses defaults. Configuration must be a table; caller-owned tables
+are copied before use. Invalid configuration types do not replace live
+handlers or commands. Repeating setup must not accumulate automatic
+registrations.
+
+`disable(buf)` retains configuration and buffer policy for `enable(buf)`.
+`dispose()` cancels owned jobs, removes automatic handlers and unchanged owned
+commands, and forgets runtime options. It is safe before setup and when
+repeated. Cold status/config queries do not initialize an engine; explicit
+`enable()` after disposal initializes defaults. Invalid setup options preserve
+the working engine.
+
+==============================================================================
+HEALTH AND INSPECTION           *format-tools-reference-health-and-inspection*
+
+Health reports actionable failures and a compact result for applicable checks.
+Disabled, optional and not-yet-activated features do not warn solely because
+they are inactive. Inspection does not configure plugins, start services or
+install dependencies. Use `:FormatToolsInfo` for detailed configuration and
+runtime information.
+
+Test workflow (tests/README.md): registered suites, filtering, required
+fixtures and retained failure evidence.
+
+vim:tw=78:ts=8:noet:ft=help:norl:
