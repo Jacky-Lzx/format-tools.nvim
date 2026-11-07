@@ -123,6 +123,12 @@ function M.inspect(buf, opts)
   }
 end
 function M.info(buf)
+  if (not buf or buf == 0) and vim.bo.filetype == "checkhealth" then
+    local alternate = vim.fn.bufnr("#")
+    if alternate > 0 and vim.api.nvim_buf_is_loaded(alternate) and vim.bo[alternate].buftype == "" then
+      buf = alternate
+    end
+  end
   local ok, info = pcall(M.inspect, buf)
   if not ok then
     info = { error = tostring(info), last = M.status(buf) }

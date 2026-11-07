@@ -1,45 +1,73 @@
 local M = {}
+
 function M.check()
-  vim.health.start("format-tools")
-  if vim.fn.has("nvim-0.11") == 1 then
-    vim.health.ok("Neovim 0.11+")
-  else
-    vim.health.error("Requires Neovim 0.11+")
-  end
-  local ok, config = pcall(require("format_tools").config)
-  if not ok then
-    vim.health.warn("setup() has not run")
+  vim.health.start("format-tools.nvim")
+  if vim.fn.has("nvim-0.11") == 0 then
+    vim.health.error("Neovim 0.11+ is required", { "Upgrade Neovim" })
     return
   end
-  local seen = {}
-  for ft, list in pairs(config.formatters_by_ft) do
+  local issues = {}
+  local function problem(level, message, advice)
+    issues[#issues + 1] = { level = level, message = message, advice = advice }
+  end
+  local plugin = package.loaded.format_tools
+  local config = plugin and plugin.config()
+  if not config or not config.enabled then
+    vim.health.info("Not configured; formatter checks skipped.")
+    return
+  end
+  local seen, deferred = {}, false
+  for _, list in pairs(config.formatters_by_ft) do
     if type(list) == "function" then
-      vim.health.info(ft .. ": dynamic formatter list (inspect in its buffer)")
+      deferred = true
     else
       for _, name in ipairs(list) do
-        if not seen[name] then
-          seen[name] = true
-          -- :checkhealth itself uses a nofile buffer. Availability probes need
-          -- a context, but must not require a modifiable source buffer.
-          local ctx = {
-            bufnr = vim.api.nvim_get_current_buf(),
-            dirname = vim.fn.getcwd(),
-            filename = vim.fn.getcwd() .. "/untitled",
-            filetype = "",
-            expandtab = true,
-            shiftwidth = 2,
-          }
-          local valid, plan =
-            pcall(require("format_tools.plan").build, ctx, config, { formatters = { name }, lsp_format = "never" })
-          local item = valid and plan.candidates[1]
-          if item and item.available then
-            vim.health.ok(name .. ": " .. (item.command or "Lua transform"))
-          else
-            vim.health.warn(name .. ": " .. (item and item.reason or tostring(plan)))
-          end
-        end
+        seen[name] = true
       end
     end
   end
+  for name in pairs(seen) do
+    local ok, builtin = pcall(require, "format_tools.formatters." .. name)
+    local definition = vim.tbl_extend("force", ok and builtin or {}, config.formatters[name] or {})
+    local cmd = definition.command
+    if type(cmd) == "string" and not definition.condition then
+      if vim.fn.executable(cmd) == 0 then
+        problem(
+          "warn",
+          name .. ": executable unavailable: " .. cmd .. "; formatting may be unavailable.",
+          { "Install/configure the formatter; inspect :FormatToolsInfo in its source buffer" }
+        )
+      end
+    elseif type(cmd) == "function" or definition.condition then
+      deferred = true
+    elseif not definition.transform then
+      problem(
+        "warn",
+        name .. ": formatter definition unavailable; formatting cannot run.",
+        { "Configure a command or transform; inspect :FormatToolsInfo" }
+      )
+    end
+  end
+  if deferred and #issues == 0 then
+    vim.health.info(
+      "Static formatter checks passed; project-dependent commands require a source buffer. Details: :FormatToolsInfo"
+    )
+    return
+  end
+
+  table.sort(issues, function(a, b)
+    if a.level ~= b.level then
+      return a.level == "error"
+    end
+    return a.message < b.message
+  end)
+  for _, issue in ipairs(issues) do
+    vim.health[issue.level](issue.message, issue.advice)
+  end
+  if #issues == 0 then
+    vim.health.ok("Configured static formatter commands are available.")
+  end
+  vim.health.info("Details: :FormatToolsInfo")
 end
+
 return M

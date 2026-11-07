@@ -101,3 +101,10 @@ or commands. Repeating setup must not accumulate automatic registrations.
 commands, and forgets runtime options. It is safe before setup and when repeated.
 Cold status/config queries do not initialize an engine; explicit `enable()` after
 disposal initializes defaults. Invalid setup options preserve the working engine.
+
+## Health and inspection
+
+Health reports actionable failures and a compact result for applicable checks. Disabled,
+optional and not-yet-activated features do not warn solely because they are inactive.
+Inspection does not configure plugins, start services or install dependencies.
+Use `:FormatToolsInfo` for detailed configuration and runtime information.
